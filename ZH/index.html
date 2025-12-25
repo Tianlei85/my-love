@@ -32,12 +32,12 @@
             transition: background 0.5s, transform 0.3s;
         }
 
-        /* --- 启动屏幕与开门特效 CSS --- */
+        /* --- 启动屏幕 CSS --- */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.95); z-index: 999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            perspective: 1200px; /* 3D 透视 */
+            perspective: 1200px; 
             overflow: hidden;
             transition: opacity 1.5s ease-in;
         }
@@ -47,15 +47,12 @@
             font-weight: 900; 
             letter-spacing: 3px;
             margin-bottom: 50px;
-            
             background: linear-gradient(180deg, #ffffff 0%, #ff9a9e 60%, #ff758c 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            
             filter: drop-shadow(0 0 10px rgba(255, 154, 158, 0.5));
-            
             animation: floatText 2.5s ease-in-out infinite;
-            transition: opacity 0.5s, transform 0.5s;
+            transition: opacity 0.3s;
         }
 
         @keyframes floatText {
@@ -68,8 +65,7 @@
             position: relative;
             width: 160px;
             height: 260px;
-            transform-style: preserve-3d;
-            transition: transform 2.5s cubic-bezier(0.7, 0, 0.2, 1); 
+            /* 移除 transition，不需要整体旋转了 */
         }
 
         /* 门板主体 */
@@ -84,56 +80,46 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            box-shadow: 
-                0 0 40px rgba(255, 154, 158, 0.5), 
-                inset 0 0 20px rgba(255,255,255,0.4);
-            
-            transform-origin: left center; 
-            transition: transform 1.8s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
-            transform-style: preserve-3d;
+            box-shadow: 0 0 40px rgba(255, 154, 158, 0.5), inset 0 0 20px rgba(255,255,255,0.4);
+            transition: transform 0.2s, box-shadow 0.3s;
+            z-index: 2;
         }
 
-        .door-btn:hover {
-            box-shadow: 0 0 60px rgba(255, 154, 158, 0.9);
+        .door-btn:active { transform: scale(0.98); }
+        .door-btn:hover { box-shadow: 0 0 60px rgba(255, 154, 158, 0.9); }
+
+        /* 爆炸碎片样式 */
+        .shard {
+            position: absolute;
+            background: linear-gradient(45deg, #ff9a9e, #fad0c4);
+            border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: 0 0 10px rgba(255, 154, 158, 0.3);
+            z-index: 3;
+            /* 初始状态不可见，JS生成后设为可见 */
         }
 
-        /* 门上的文字 */
         .door-text {
             color: #7a3e3e;
             font-size: 24px;
             font-weight: bold;
-            letter-spacing: 3px; /* 稍微减小字间距以容纳4个字 */
+            letter-spacing: 3px;
             writing-mode: vertical-rl; 
             text-orientation: upright;
             opacity: 0.9;
             text-shadow: 1px 1px 2px rgba(255,255,255,0.5);
         }
 
-        /* 门把手 */
         .door-knob {
-            position: absolute;
-            right: 18px;
-            top: 50%;
-            width: 14px;
-            height: 14px;
+            position: absolute; right: 18px; top: 50%;
+            width: 14px; height: 14px;
             background: radial-gradient(circle at 30% 30%, #fff, #ddd);
             border-radius: 50%;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
         }
 
-        /* --- 动画状态类 --- */
         .fade-out-text {
             opacity: 0 !important;
-            transform: translateY(-20px) !important;
-        }
-
-        .door-open {
-            transform: rotateY(-120deg); 
-        }
-
-        .camera-zoom {
-            transition-delay: 0.3s !important; 
-            transform: scale(15) translateZ(200px); 
+            transform: scale(0.8);
         }
 
         .loading {
@@ -151,7 +137,7 @@
         <h1 id="welcome-text">宝宝请进</h1>
         
         <div class="door-wrapper" id="door-scene">
-            <div class="door-btn" onclick="openDoorAndEnter()">
+            <div class="door-btn" onclick="explodeDoorAndEnter()">
                 <div class="door-text">点击开门</div>
                 <div class="door-knob"></div>
             </div>
@@ -220,7 +206,6 @@
 
         // --- 2. 静谧镜湖 ---
         const waterGeometry = new THREE.PlaneGeometry(10000, 10000); 
-
         const waterNormals = new THREE.TextureLoader().load('https://unpkg.com/three@0.160.0/examples/textures/water/Water_1_M_Normal.jpg', function (texture) {
             texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
         });
@@ -244,7 +229,7 @@
         water.material.uniforms.size.value = 1.0; 
         scene.add(water);
 
-        // --- Bloom (泛光) ---
+        // --- Bloom ---
         const renderScene = new RenderPass(scene, camera);
         const bloomResolution = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
         const bloomPass = new UnrealBloomPass(bloomResolution, 1.5, 0.4, 0.85);
@@ -259,60 +244,33 @@
         // --- 3. 纹理生成 ---
         function getBorderTexture(colorHex) {
             if (borderTextureCache[colorHex]) return borderTextureCache[colorHex];
-            
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128;
             const ctx = canvas.getContext('2d');
-            
             const r = (colorHex >> 16) & 255;
             const g = (colorHex >> 8) & 255;
             const b = colorHex & 255;
-
             function drawRoundRectPath(x, y, w, h, r) {
-                ctx.beginPath();
-                ctx.moveTo(x + r, y);
-                ctx.lineTo(x + w - r, y);
-                ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-                ctx.lineTo(x + w, y + h - r);
-                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-                ctx.lineTo(x + r, y + h);
-                ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-                ctx.lineTo(x, y + r);
-                ctx.quadraticCurveTo(x, y, x + r, y);
-                ctx.closePath();
+                ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+                ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
             }
-
-            const padding = 6; 
-            const w = 128 - padding * 2;
-            const h = 128 - padding * 2;
-            const x = padding;
-            const y = padding;
-            const cornerRadius = 3; 
-
+            const padding = 6; const w = 128 - padding * 2; const h = 128 - padding * 2;
+            const x = padding; const y = padding; const cornerRadius = 3; 
             ctx.clearRect(0, 0, 128, 128);
-
-            ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.6)`;
-            ctx.shadowBlur = 8;
-            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.4)`;
-            ctx.lineWidth = 2;
-            drawRoundRectPath(x, y, w, h, cornerRadius);
-            ctx.stroke();
-
-            ctx.shadowBlur = 3; 
-            ctx.shadowColor = `rgba(255, 255, 255, 0.5)`;
-            ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`; 
-            ctx.lineWidth = 1;
-            drawRoundRectPath(x, y, w, h, cornerRadius);
-            ctx.stroke();
-
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.fillStyle = 'black';
+            ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.6)`; ctx.shadowBlur = 8;
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.4)`; ctx.lineWidth = 2;
+            drawRoundRectPath(x, y, w, h, cornerRadius); ctx.stroke();
+            ctx.shadowBlur = 3; ctx.shadowColor = `rgba(255, 255, 255, 0.5)`;
+            ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`; ctx.lineWidth = 1;
+            drawRoundRectPath(x, y, w, h, cornerRadius); ctx.stroke();
+            ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = 'black';
             const inset = 2;
             drawRoundRectPath(x + inset, y + inset, w - inset*2, h - inset*2, cornerRadius - 1);
             ctx.fill();
-
             ctx.globalCompositeOperation = 'source-over';
-
             const texture = new THREE.CanvasTexture(canvas);
             borderTextureCache[colorHex] = texture;
             return texture;
@@ -340,28 +298,18 @@
             let rot = Math.PI / 2 * 3;
             let x = cx, y = cy;
             const step = Math.PI / spikes;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy - outerRadius);
+            ctx.beginPath(); ctx.moveTo(cx, cy - outerRadius);
             for (let i = 0; i < spikes; i++) {
-                x = cx + Math.cos(rot) * outerRadius;
-                y = cy + Math.sin(rot) * outerRadius;
-                ctx.lineTo(x, y);
-                rot += step;
-                x = cx + Math.cos(rot) * innerRadius;
-                y = cy + Math.sin(rot) * innerRadius;
-                ctx.lineTo(x, y);
-                rot += step;
+                x = cx + Math.cos(rot) * outerRadius; y = cy + Math.sin(rot) * outerRadius;
+                ctx.lineTo(x, y); rot += step;
+                x = cx + Math.cos(rot) * innerRadius; y = cy + Math.sin(rot) * innerRadius;
+                ctx.lineTo(x, y); rot += step;
             }
-            ctx.lineTo(cx, cy - outerRadius);
-            ctx.closePath();
+            ctx.lineTo(cx, cy - outerRadius); ctx.closePath();
             const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 30);
-            grad.addColorStop(0, '#ffffff');
-            grad.addColorStop(1, '#cccccc');
-            ctx.fillStyle = grad;
-            ctx.fill();
-            ctx.shadowColor = "white";
-            ctx.shadowBlur = 10;
-            ctx.stroke();
+            grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#cccccc');
+            ctx.fillStyle = grad; ctx.fill();
+            ctx.shadowColor = "white"; ctx.shadowBlur = 10; ctx.stroke();
             return new THREE.CanvasTexture(canvas);
         }
 
@@ -372,18 +320,12 @@
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128; 
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#000'; 
-            ctx.fillRect(0,0,128,128);
-            ctx.strokeStyle = '#fff'; 
-            ctx.lineWidth = 2; 
-            ctx.strokeRect(3,3,122,122);
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 15px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#000'; ctx.fillRect(0,0,128,128);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(3,3,122,122);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 15px sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText("美好回忆", 64, 50);
-            ctx.font = '10px sans-serif';
-            ctx.fillStyle = '#ccc';
+            ctx.font = '10px sans-serif'; ctx.fillStyle = '#ccc';
             ctx.fillText(text, 64, 75);
             const tex = new THREE.CanvasTexture(canvas);
             tex.colorSpace = THREE.SRGBColorSpace;
@@ -395,15 +337,11 @@
         function generateTextPositions() {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 700;
-            canvas.height = 750;
-            ctx.fillStyle = '#000000'; 
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            canvas.width = 700; canvas.height = 750;
+            ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.font = 'bold 130px "Microsoft YaHei", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const lineHeight = 150;
-            const startY = 120;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            const lineHeight = 150; const startY = 120;
             ctx.fillStyle = '#ffffff'; 
             const col1X = 200; 
             ctx.fillText("宝", col1X, startY + lineHeight * 1); 
@@ -422,19 +360,14 @@
             for (let y = 0; y < canvas.height; y += step) {
                 for (let x = 0; x < canvas.width; x += step) {
                     const index = (y * canvas.width + x) * 4;
-                    const r = data[index];
-                    const g = data[index + 1];
-
+                    const r = data[index]; const g = data[index + 1];
                     if (r > 64) {
                         const posX = (x - canvas.width / 2) * 0.045; 
                         const posY = -(y - canvas.height / 2) * 0.045 + 7.5; 
                         const posZ = (Math.random() - 0.5) * 1.5;
                         let pColor = 0xffffff;
                         if (g < 240) { pColor = 0xFFC6D5; }
-                        TEXT_POINTS.push({
-                            vec: new THREE.Vector3(posX, posY, posZ),
-                            color: pColor
-                        });
+                        TEXT_POINTS.push({ vec: new THREE.Vector3(posX, posY, posZ), color: pColor });
                     }
                 }
             }
@@ -450,10 +383,7 @@
         // --- 背景星空 ---
         const starCount = 2000;
         const starGeo = new THREE.BufferGeometry();
-        const starPositions = [];
-        const starSizes = [];
-        const starPhases = [];
-
+        const starPositions = []; const starSizes = []; const starPhases = [];
         for(let i=0; i<starCount; i++) {
             const r = 200 + Math.random() * 300; 
             const theta = 2 * Math.PI * Math.random();
@@ -465,7 +395,6 @@
             starSizes.push(Math.random() * 4.0 + 2.0); 
             starPhases.push(Math.random() * Math.PI * 2);
         }
-
         starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
         starGeo.setAttribute('size', new THREE.Float32BufferAttribute(starSizes, 1));
         starGeo.setAttribute('phase', new THREE.Float32BufferAttribute(starPhases, 1));
@@ -477,10 +406,8 @@
                 uTime: { value: 0 }
             },
             vertexShader: `
-                attribute float size;
-                attribute float phase;
-                varying float vOpacity;
-                uniform float uTime;
+                attribute float size; attribute float phase;
+                varying float vOpacity; uniform float uTime;
                 void main() {
                     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                     gl_Position = projectionMatrix * mvPosition;
@@ -490,17 +417,14 @@
                 }
             `,
             fragmentShader: `
-                uniform vec3 color;
-                uniform sampler2D pointTexture;
+                uniform vec3 color; uniform sampler2D pointTexture;
                 varying float vOpacity;
                 void main() {
                     gl_FragColor = vec4(color, vOpacity);
                     gl_FragColor = gl_FragColor * texture2D(pointTexture, gl_PointCoord);
                 }
             `,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            transparent: true
+            blending: THREE.AdditiveBlending, depthWrite: false, transparent: true
         });
 
         const starSystem = new THREE.Points(starGeo, starMaterial);
@@ -508,26 +432,19 @@
 
         function createTopStar() {
             const mat = new THREE.SpriteMaterial({
-                map: starTexture, 
-                color: 0xffffff, 
-                transparent: true, 
-                blending: THREE.AdditiveBlending,
-                opacity: 0 
+                map: starTexture, color: 0xffffff, transparent: true, 
+                blending: THREE.AdditiveBlending, opacity: 0 
             });
             const sprite = new THREE.Sprite(mat);
-            sprite.scale.set(0, 0, 1); 
-            sprite.position.set(0, 15.5, 0); 
+            sprite.scale.set(0, 0, 1); sprite.position.set(0, 15.5, 0); 
             sprite.userData = { isTopStar: true, currentAlpha: 0, currentScale: 0 };
             particlesGroup.add(sprite);
         }
         createTopStar();
 
-        // --- 核心：创建粒子 (保持下沉分布逻辑) ---
+        // --- 核心：创建粒子 ---
         function createParticle(isFixedImage = false, texture = null, imgRatio = 1.0) {
-            let mesh;
-            let isImage = false;
-            let targetPos; 
-
+            let mesh; let isImage = false; let targetPos; 
             const ratio = Math.pow(Math.random(), 1.8); 
             const h = ratio * 24.5 - 11; 
             let maxR = 12 * Math.pow(1 - ratio, 0.9);
@@ -538,30 +455,23 @@
             const angle = Math.random() * Math.PI * 2;
             targetPos = new THREE.Vector3(Math.cos(angle)*r, h, Math.sin(angle)*r);
             
-            let textTargetPos;
-            let finalScale = new THREE.Vector3();
+            let textTargetPos; let finalScale = new THREE.Vector3();
             
             if (isFixedImage && texture) {
-                mesh = new THREE.Group();
-                isImage = true;
+                mesh = new THREE.Group(); isImage = true;
                 const borderTex = getBorderTexture(0xffffff); 
                 const borderMat = new THREE.MeshBasicMaterial({ 
                     map: borderTex, color: 0xffffff, transparent: true,
                     opacity: 1.0, side: THREE.DoubleSide, depthWrite: false
                 }); 
                 const borderMesh = new THREE.Mesh(photoGeo, borderMat);
-                borderMesh.scale.set(1.1, 1.1, 1.0); 
-                borderMesh.position.z = -0.01; 
+                borderMesh.scale.set(1.1, 1.1, 1.0); borderMesh.position.z = -0.01; 
                 mesh.add(borderMesh);
                 const photoMat = new THREE.MeshBasicMaterial({ 
-                    map: texture, 
-                    color: 0xcccccc, 
-                    side: THREE.DoubleSide, 
-                    transparent: true
+                    map: texture, color: 0xcccccc, side: THREE.DoubleSide, transparent: true
                 });
                 const photoMesh = new THREE.Mesh(photoGeo, photoMat);
-                photoMesh.position.z = 0.01;
-                mesh.add(photoMesh);
+                photoMesh.position.z = 0.01; mesh.add(photoMesh);
                 finalScale.set(0.015 * imgRatio, 0.015, 0.015);
                 const pAngle = Math.random() * Math.PI * 2;
                 const pR = 18 + Math.random() * 6; 
@@ -570,8 +480,7 @@
             } else {
                 if (particles.length < TEXT_POINTS.length) {
                     const pt = TEXT_POINTS[particles.length];
-                    textTargetPos = pt.vec;
-                    var particleColor = pt.color;
+                    textTargetPos = pt.vec; var particleColor = pt.color;
                 } else {
                     const bgAngle = Math.random() * Math.PI * 2;
                     const bgR = 25 + Math.random() * 20;
@@ -581,19 +490,15 @@
                     var particleColor = isPink ? 0xFFC6D5 : 0xffffff;
                 }
                 const mat = new THREE.SpriteMaterial({
-                    map: glowTexture, 
-                    color: particleColor, 
-                    transparent: true, opacity: 0.8,
-                    blending: THREE.AdditiveBlending
+                    map: glowTexture, color: particleColor, 
+                    transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending
                 });
                 mesh = new THREE.Sprite(mat);
                 const s = 0.15 + Math.random() * 0.3;
                 finalScale.set(s, s, s);
             }
             mesh.position.set(
-                (Math.random() - 0.5) * 60, 
-                40 + Math.random() * 40,    
-                (Math.random() - 0.5) * 60  
+                (Math.random() - 0.5) * 60, 40 + Math.random() * 40, (Math.random() - 0.5) * 60  
             );
             mesh.scale.set(0, 0, 0); 
             particlesGroup.add(mesh);
@@ -622,7 +527,6 @@
         function processLoadedTexture(tex) {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.generateMipmaps = true;
-            
             let ratio = 1.0;
             if(tex.image && tex.image.width && tex.image.height) {
                 ratio = tex.image.width / tex.image.height;
@@ -633,54 +537,71 @@
         }
 
         // --- 立即启动摄像头和资源加载 ---
-        // 这样弹窗在网页刚打开时就会跳出
         (async function initResources() {
-            // 开始加载照片
             loadPhotos();
-            // 立即尝试获取摄像头
             await startCamera();
         })();
 
         // --- 核心：开门并启动体验 ---
-        window.openDoorAndEnter = function() {
-            // 1. 文本消失
+        window.explodeDoorAndEnter = function() {
             const textEl = document.getElementById('welcome-text');
             if(textEl) textEl.classList.add('fade-out-text');
 
-            // 2. 门动画 (开门 + 放大)
             const doorBtn = document.querySelector('.door-btn');
-            const doorScene = document.getElementById('door-scene');
+            const wrapper = document.getElementById('door-scene');
             
-            if(doorBtn) doorBtn.classList.add('door-open');
-            if(doorScene) doorScene.classList.add('camera-zoom');
+            // 隐藏原本的门
+            if(doorBtn) doorBtn.style.opacity = '0';
 
-            // 3. 转场：隐藏门，显示场景
-            // 此时照片应该加载得差不多了，摄像头也应该已经授权了
+            // 创建碎片并爆炸
+            const rows = 8;
+            const cols = 5;
+            const width = 160 / cols;
+            const height = 260 / rows;
+
+            for(let i=0; i<rows; i++) {
+                for(let j=0; j<cols; j++) {
+                    const shard = document.createElement('div');
+                    shard.className = 'shard';
+                    shard.style.width = width + 'px';
+                    shard.style.height = height + 'px';
+                    shard.style.left = (j * width) + 'px';
+                    shard.style.top = (i * height) + 'px';
+                    
+                    wrapper.appendChild(shard);
+
+                    const randomX = (Math.random() - 0.5) * 800;
+                    const randomY = (Math.random() - 0.5) * 800;
+                    const randomZ = Math.random() * 500;
+                    
+                    gsap.to(shard, {
+                        x: randomX,
+                        y: randomY,
+                        z: randomZ,
+                        rotationX: Math.random() * 720,
+                        rotationY: Math.random() * 720,
+                        opacity: 0,
+                        scale: 0,
+                        duration: 1.5,
+                        ease: "power3.out"
+                    });
+                }
+            }
+
+            // 转场
             setTimeout(() => {
                 const startScreen = document.getElementById('start-screen');
                 startScreen.style.opacity = 0;
-                
-                playIntro(); // 开始粒子动画
-                
+                playIntro(); 
                 setTimeout(() => startScreen.style.display = 'none', 1500);
-            }, 2500); 
+            }, 1000); 
         };
 
         function loadPhotos() {
             for(let i=1; i<=MAX_PHOTO_CHECK; i++) {
-                loader.load(
-                    `${i}.JPG`, 
-                    (tex) => { processLoadedTexture(tex); }, 
-                    undefined, 
-                    (err) => {
-                        loader.load(
-                            `${i}.jpg`,
-                            (tex) => { processLoadedTexture(tex); },
-                            undefined,
-                            (err2) => { checkAllChecked(); }
-                        );
-                    }
-                );
+                loader.load(`${i}.JPG`, (tex) => { processLoadedTexture(tex); }, undefined, (err) => {
+                    loader.load(`${i}.jpg`, (tex) => { processLoadedTexture(tex); }, undefined, (err2) => { checkAllChecked(); });
+                });
             }
         }
         
@@ -741,8 +662,7 @@
             if (sceneState !== 'OPENING') {
                 particlesGroup.children.forEach(child => {
                     if(child.userData.isTopStar) {
-                        let targetAlpha = 1.0;
-                        let targetScale = 3.5; 
+                        let targetAlpha = 1.0; let targetScale = 3.5; 
                         if (sceneState === 'EXPLODE') { targetAlpha = 0.0; targetScale = 0.0; }
                         if (typeof child.userData.currentAlpha === 'undefined') child.userData.currentAlpha = 0;
                         if (typeof child.userData.currentScale === 'undefined') child.userData.currentScale = 3.5;
@@ -788,11 +708,7 @@
             }
 
             const lm = results.multiHandLandmarks[0];
-            const thumb = lm[4];
-            const index = lm[8];
-            const wrist = lm[0];
-            const currentPalmX = lm[9].x; 
-
+            const thumb = lm[4]; const index = lm[8]; const wrist = lm[0]; const currentPalmX = lm[9].x; 
             if (lastPalmX !== null && !isPinching) {
                 const deltaX = currentPalmX - lastPalmX;
                 if (Math.abs(deltaX) > 0.002) rotationSpeed -= deltaX * 0.8; 
@@ -805,30 +721,24 @@
             spread /= 4;
 
             if (!isPinching) {
-                if (spread < 0.22) { sceneState = 'TREE'; } 
-                else { sceneState = 'EXPLODE'; }
+                if (spread < 0.22) { sceneState = 'TREE'; } else { sceneState = 'EXPLODE'; }
             }
 
             if (pinchDist < 0.05) {
                 if (sceneState === 'EXPLODE') {
-                    isPinching = true;
-                    if (!heldParticle) grabNewParticle();
+                    isPinching = true; if (!heldParticle) grabNewParticle();
                 }
             } else {
-                isPinching = false;
-                if (heldParticle) releaseCurrentParticle();
+                isPinching = false; if (heldParticle) releaseCurrentParticle();
             }
 
             if (sceneState === 'TREE') {
-                statusDiv.innerText = "🖐 张开：大声说爱你";
-                statusDiv.style.background = "rgba(50, 50, 60, 0.4)";
+                statusDiv.innerText = "🖐 张开：大声说爱你"; statusDiv.style.background = "rgba(50, 50, 60, 0.4)";
             } else {
                 if (isPinching) {
-                    statusDiv.innerText = "👌 捏合：查看美好瞬间";
-                    statusDiv.style.background = "rgba(200, 200, 200, 0.3)";
+                    statusDiv.innerText = "👌 捏合：查看美好瞬间"; statusDiv.style.background = "rgba(200, 200, 200, 0.3)";
                 } else {
-                    statusDiv.innerText = "✊ 握拳：藏入心底 | 👌 捏合：查看照片";
-                    statusDiv.style.background = "rgba(180, 50, 80, 0.6)";
+                    statusDiv.innerText = "✊ 握拳：藏入心底 | 👌 捏合：查看照片"; statusDiv.style.background = "rgba(180, 50, 80, 0.6)";
                 }
             }
         }
@@ -838,13 +748,9 @@
             if (candidates.length === 0) candidates = particles.filter(p => p.state === 'free');
             if (candidates.length > 0) {
                 const p = candidates[Math.floor(Math.random() * candidates.length)];
-                p.state = 'grabbed';
-                heldParticle = p;
-                scene.attach(p.mesh); 
+                p.state = 'grabbed'; heldParticle = p; scene.attach(p.mesh); 
                 if (p.isImage) {
-                    p.mesh.traverse((child) => {
-                        if (child.isMesh) { child.renderOrder = 9999; child.material.depthTest = false; }
-                    });
+                    p.mesh.traverse((child) => { if (child.isMesh) { child.renderOrder = 9999; child.material.depthTest = false; } });
                 } else {
                     p.mesh.renderOrder = 9999; p.mesh.material.depthTest = false;
                 }
@@ -861,13 +767,9 @@
 
         function releaseCurrentParticle() {
             if (!heldParticle) return;
-            const p = heldParticle;
-            p.state = 'free';
-            heldParticle = null;
+            const p = heldParticle; p.state = 'free'; heldParticle = null;
             if (p.isImage) {
-                p.mesh.traverse((child) => {
-                    if (child.isMesh) { child.renderOrder = 0; child.material.depthTest = true; }
-                });
+                p.mesh.traverse((child) => { if (child.isMesh) { child.renderOrder = 0; child.material.depthTest = true; } });
             } else {
                 p.mesh.renderOrder = 0; p.mesh.material.depthTest = true;
             }
@@ -908,7 +810,6 @@
         let lastVideoTime = 0;
         async function processVideo() {
             if (videoElement.paused || videoElement.ended) return;
-            
             const now = Date.now();
             if (now - lastVideoTime > 100) {
                 if (videoElement.readyState >= 2) {
