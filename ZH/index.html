@@ -35,27 +35,34 @@
         /* --- 启动屏幕与开门特效 CSS --- */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.98); z-index: 999;
+            background: rgba(0,0,0,0.95); z-index: 999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             perspective: 1200px; /* 3D 透视 */
             overflow: hidden;
-            transition: opacity 1s ease-in;
+            transition: opacity 1.5s ease-in;
         }
 
         #welcome-text {
-            color: #fff;
-            font-size: 24px;
-            font-weight: 300;
-            letter-spacing: 2px;
-            margin-bottom: 40px;
-            text-shadow: 0 0 10px rgba(255, 154, 158, 0.8);
-            animation: floatText 2s ease-in-out infinite;
-            transition: opacity 0.5s;
+            font-size: 32px;
+            font-weight: 900; /* 字体加粗 */
+            letter-spacing: 3px;
+            margin-bottom: 50px;
+            
+            /* 渐变粉色文字效果 */
+            background: linear-gradient(180deg, #ffffff 0%, #ff9a9e 60%, #ff758c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            
+            /* 文字发光 */
+            filter: drop-shadow(0 0 10px rgba(255, 154, 158, 0.5));
+            
+            animation: floatText 2.5s ease-in-out infinite;
+            transition: opacity 0.5s, transform 0.5s;
         }
 
         @keyframes floatText {
-            0%, 100% { transform: translateY(0); opacity: 0.9; }
-            50% { transform: translateY(-5px); opacity: 1; }
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
         }
 
         /* 门的容器 */
@@ -64,7 +71,8 @@
             width: 160px;
             height: 260px;
             transform-style: preserve-3d;
-            transition: transform 2s cubic-bezier(0.6, 0.05, 0.2, 0.99); /* 镜头推进动画 */
+            /* 镜头推进动画：延迟0.2秒执行，让门先开一点 */
+            transition: transform 2.5s cubic-bezier(0.7, 0, 0.2, 1); 
         }
 
         /* 门板主体 */
@@ -74,62 +82,68 @@
             height: 100%;
             background: linear-gradient(45deg, #ff9a9e 0%, #fad0c4 99%, #fad0c4 100%);
             border: 4px solid #fff;
-            border-radius: 10px;
+            border-radius: 12px;
             cursor: pointer;
             display: flex;
             justify-content: center;
             align-items: center;
             box-shadow: 
-                0 0 30px rgba(255, 154, 158, 0.4), 
-                inset 0 0 20px rgba(255,255,255,0.5);
+                0 0 40px rgba(255, 154, 158, 0.5), 
+                inset 0 0 20px rgba(255,255,255,0.4);
             
-            /* 关键：设置旋转轴在左侧，实现开门效果 */
+            /* 旋转轴在左侧 */
             transform-origin: left center; 
-            transition: transform 2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
+            /* 开门动画：立即执行 */
+            transition: transform 1.8s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
             transform-style: preserve-3d;
         }
 
         .door-btn:hover {
-            box-shadow: 0 0 50px rgba(255, 154, 158, 0.8);
+            box-shadow: 0 0 60px rgba(255, 154, 158, 0.9);
         }
 
         /* 门上的文字 */
         .door-text {
-            color: #553333;
+            color: #7a3e3e;
             font-size: 24px;
             font-weight: bold;
-            letter-spacing: 4px;
+            letter-spacing: 5px;
             writing-mode: vertical-rl; /* 竖排文字 */
             text-orientation: upright;
-            opacity: 0.8;
+            opacity: 0.9;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.5);
         }
 
         /* 门把手 */
         .door-knob {
             position: absolute;
-            right: 15px;
+            right: 18px;
             top: 50%;
-            width: 12px;
-            height: 12px;
-            background: #fff;
+            width: 14px;
+            height: 14px;
+            background: radial-gradient(circle at 30% 30%, #fff, #ddd);
             border-radius: 50%;
-            box-shadow: 1px 1px 5px rgba(0,0,0,0.2);
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
         }
 
         /* --- 动画状态类 --- */
-        /* 点击后：隐藏文字 */
+        
+        /* 1. 隐藏欢迎语 */
         .fade-out-text {
             opacity: 0 !important;
+            transform: translateY(-20px) !important;
         }
 
-        /* 点击后：门打开 */
+        /* 2. 门板旋转打开 (先执行) */
         .door-open {
-            transform: rotateY(-110deg); /* 向内打开 */
+            transform: rotateY(-120deg); /* 向内大幅打开 */
         }
 
-        /* 点击后：镜头推进 */
+        /* 3. 镜头推进放大 (稍后执行) */
         .camera-zoom {
-            transform: scale(8) translateZ(100px); /* 放大并前移 */
+            /* 延迟0.3秒，等门开一条缝后再冲进去 */
+            transition-delay: 0.3s !important; 
+            transform: scale(15) translateZ(200px); /* 放大倍数增加 */
         }
 
         .loading {
@@ -143,11 +157,12 @@
 </head>
 <body>
 
+    <!-- 直接显示大门 -->
     <div id="start-screen">
         <h1 id="welcome-text">宝宝请进</h1>
         
         <div class="door-wrapper" id="door-scene">
-            <div class="door-btn" onclick="initExperience()">
+            <div class="door-btn" onclick="openDoorAndEnter()">
                 <div class="door-text">开门</div>
                 <div class="door-knob"></div>
             </div>
@@ -524,14 +539,9 @@
             let isImage = false;
             let targetPos; 
 
-            // 使用 Math.pow(Math.random(), 1.8) 让 ratio 更倾向于 0 (底部)，缓解顶部拥挤
             const ratio = Math.pow(Math.random(), 1.8); 
-            
             const h = ratio * 24.5 - 11; 
-            
-            // 稍微增大基底半径 (12)，并调整指数
             let maxR = 12 * Math.pow(1 - ratio, 0.9);
-            
             maxR *= (0.8 + 0.2 * Math.sin(ratio * Math.PI * 14));
             let r = maxR * (0.2 + 0.8 * Math.sqrt(Math.random()));
 
@@ -616,7 +626,6 @@
                     const placeholder = createPlaceholderTexture("没有照片");
                     for(let k=0; k<20; k++) particles.push(createParticle(true, placeholder, 1.0));
                 }
-                // 加载完毕，但等待用户点击门
                 document.getElementById('loading').style.display = 'none'; 
             }
         }
@@ -634,34 +643,39 @@
             checkAllChecked();
         }
 
-        // --- 核心：初始化与动画逻辑 ---
-        window.initExperience = async function() {
-            // 1. 文本立即消失
+        // --- 核心：开门并启动体验 ---
+        window.openDoorAndEnter = async function() {
+            // 1. 文本消失
             const textEl = document.getElementById('welcome-text');
             if(textEl) textEl.classList.add('fade-out-text');
 
-            // 2. 门打开 + 镜头推进动画
+            // 2. 门动画 (开门 + 放大)
             const doorBtn = document.querySelector('.door-btn');
             const doorScene = document.getElementById('door-scene');
             
             if(doorBtn) doorBtn.classList.add('door-open');
             if(doorScene) doorScene.classList.add('camera-zoom');
 
-            // 3. 延迟后隐藏 Start Screen 并开始体验
-            setTimeout(async () => {
+            // 3. 同时申请权限并加载 (浏览器要求在点击事件中调用 getUserMedia)
+            const loading = document.getElementById('loading');
+            
+            // 延迟一点显示loading，避免破坏动画
+            setTimeout(() => { loading.style.display = 'block'; }, 1000);
+
+            // 启动加载和摄像头
+            loadPhotos();
+            await startCamera();
+
+            // 4. 转场：隐藏门，显示场景
+            setTimeout(() => {
                 const startScreen = document.getElementById('start-screen');
                 startScreen.style.opacity = 0;
                 
-                document.getElementById('loading').style.display = 'block';
-                await startCamera();
                 playIntro(); // 开始粒子动画
                 
-                setTimeout(() => startScreen.style.display = 'none', 1000);
-            }, 1800); // 1.8秒后切换，留给门打开和放大的时间
+                setTimeout(() => startScreen.style.display = 'none', 1500);
+            }, 2500); // 留足时间给“穿过门”的动画
         };
-
-        // 预加载照片
-        loadPhotos();
 
         function loadPhotos() {
             for(let i=1; i<=MAX_PHOTO_CHECK; i++) {
@@ -887,15 +901,18 @@
                     video: { width: 320, height: 240, facingMode: 'user' }
                 });
                 videoElement.srcObject = stream;
-                videoElement.onloadedmetadata = () => {
-                    videoElement.play();
-                    requestAnimationFrame(processVideo);
-                };
+                return new Promise((resolve) => {
+                    videoElement.onloadedmetadata = () => {
+                        videoElement.play();
+                        requestAnimationFrame(processVideo);
+                        resolve();
+                    };
+                });
             } catch (err) {
                 console.warn("Camera access denied:", err);
-                // 这里没有了alert，直接静默失败也行，或者在status里提示
                 const statusDiv = document.getElementById('status');
                 if(statusDiv) statusDiv.innerText = "⭐ 仅供观赏 (摄像头未授权)";
+                return Promise.resolve();
             }
         }
 
