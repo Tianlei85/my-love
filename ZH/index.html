@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>回忆圣诞树</title>
+    <title>爱的回忆圣诞树</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: "Microsoft YaHei", sans-serif; touch-action: none; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
@@ -74,7 +74,6 @@
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         import { Water } from 'three/addons/objects/Water.js';
 
-        // 修改点：将最大照片检查数改为 100
         const MAX_PHOTO_CHECK = 100; 
         const borderTextureCache = {};
 
@@ -119,7 +118,7 @@
                 sunDirection: new THREE.Vector3(5, 5, -10).normalize(), 
                 sunColor: 0xffffff, 
                 waterColor: 0x001e0f, 
-                distortionScale: 0, // 0 = 完美镜面，无拉伸 BUG
+                distortionScale: 0, 
                 fog: scene.fog !== undefined
             }
         );
@@ -540,23 +539,35 @@
             }
         }
 
+        // 修改点：照片加载逻辑，支持大写JPG和小写jpg
+        function processLoadedTexture(tex) {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            let ratio = 1.0;
+            if(tex.image && tex.image.width && tex.image.height) {
+                ratio = tex.image.width / tex.image.height;
+            }
+            for(let k=0; k<5; k++) particles.push(createParticle(true, tex, ratio));
+            successfulPhotos++;
+            checkAllChecked();
+        }
+
         for(let i=1; i<=MAX_PHOTO_CHECK; i++) {
-            const filename = `${i}.JPG`;
+            // 优先尝试大写 JPG
             loader.load(
-                filename, 
-                (tex) => {
-                    tex.colorSpace = THREE.SRGBColorSpace;
-                    let ratio = 1.0;
-                    if(tex.image && tex.image.width && tex.image.height) {
-                        ratio = tex.image.width / tex.image.height;
-                    }
-                    for(let k=0; k<5; k++) particles.push(createParticle(true, tex, ratio));
-                    successfulPhotos++;
-                    checkAllChecked();
-                }, 
+                `${i}.JPG`, 
+                (tex) => { processLoadedTexture(tex); }, 
                 undefined, 
                 (err) => {
-                    checkAllChecked();
+                    // 如果 JPG 失败，尝试小写 jpg
+                    loader.load(
+                        `${i}.jpg`,
+                        (tex) => { processLoadedTexture(tex); },
+                        undefined,
+                        (err2) => {
+                            // 两个都失败，标记已检查
+                            checkAllChecked();
+                        }
+                    );
                 }
             );
         }
