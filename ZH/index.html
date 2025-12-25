@@ -32,24 +32,105 @@
             transition: background 0.5s, transform 0.3s;
         }
 
-        /* 启动屏幕 */
+        /* --- 启动屏幕与开门特效 CSS --- */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95); z-index: 999;
+            background: rgba(0,0,0,0.98); z-index: 999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: white; text-align: center;
+            perspective: 1200px; /* 3D 透视 */
+            overflow: hidden;
+            transition: opacity 1s ease-in;
         }
-        .start-btn {
-            margin-top: 30px;
-            padding: 15px 40px;
-            font-size: 20px;
+
+        #welcome-text {
+            color: #fff;
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            margin-bottom: 40px;
+            text-shadow: 0 0 10px rgba(255, 154, 158, 0.8);
+            animation: floatText 2s ease-in-out infinite;
+            transition: opacity 0.5s;
+        }
+
+        @keyframes floatText {
+            0%, 100% { transform: translateY(0); opacity: 0.9; }
+            50% { transform: translateY(-5px); opacity: 1; }
+        }
+
+        /* 门的容器 */
+        .door-wrapper {
+            position: relative;
+            width: 160px;
+            height: 260px;
+            transform-style: preserve-3d;
+            transition: transform 2s cubic-bezier(0.6, 0.05, 0.2, 0.99); /* 镜头推进动画 */
+        }
+
+        /* 门板主体 */
+        .door-btn {
+            position: absolute;
+            width: 100%;
+            height: 100%;
             background: linear-gradient(45deg, #ff9a9e 0%, #fad0c4 99%, #fad0c4 100%);
-            border: none; border-radius: 50px;
-            color: #333; font-weight: bold; cursor: pointer;
-            box-shadow: 0 0 20px rgba(255, 154, 158, 0.5);
-            transition: transform 0.2s;
+            border: 4px solid #fff;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 
+                0 0 30px rgba(255, 154, 158, 0.4), 
+                inset 0 0 20px rgba(255,255,255,0.5);
+            
+            /* 关键：设置旋转轴在左侧，实现开门效果 */
+            transform-origin: left center; 
+            transition: transform 2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
+            transform-style: preserve-3d;
         }
-        .start-btn:active { transform: scale(0.95); }
+
+        .door-btn:hover {
+            box-shadow: 0 0 50px rgba(255, 154, 158, 0.8);
+        }
+
+        /* 门上的文字 */
+        .door-text {
+            color: #553333;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            writing-mode: vertical-rl; /* 竖排文字 */
+            text-orientation: upright;
+            opacity: 0.8;
+        }
+
+        /* 门把手 */
+        .door-knob {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 1px 1px 5px rgba(0,0,0,0.2);
+        }
+
+        /* --- 动画状态类 --- */
+        /* 点击后：隐藏文字 */
+        .fade-out-text {
+            opacity: 0 !important;
+        }
+
+        /* 点击后：门打开 */
+        .door-open {
+            transform: rotateY(-110deg); /* 向内打开 */
+        }
+
+        /* 点击后：镜头推进 */
+        .camera-zoom {
+            transform: scale(8) translateZ(100px); /* 放大并前移 */
+        }
 
         .loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -63,9 +144,14 @@
 <body>
 
     <div id="start-screen">
-        <h1 style="font-weight: 300; margin-bottom: 10px;">✨ 圣诞星光回忆 ✨</h1>
-        <p style="font-size: 14px; opacity: 0.8; max-width: 80%;">为保证流畅体验，请允许使用摄像头<br>手势识别将在点击下方按钮后开启</p>
-        <button class="start-btn" onclick="initExperience()">开启美好回忆</button>
+        <h1 id="welcome-text">宝宝请进</h1>
+        
+        <div class="door-wrapper" id="door-scene">
+            <div class="door-btn" onclick="initExperience()">
+                <div class="door-text">开门</div>
+                <div class="door-knob"></div>
+            </div>
+        </div>
     </div>
 
     <div id="loading" class="loading">
@@ -432,19 +518,18 @@
         }
         createTopStar();
 
-        // --- 核心：创建粒子 (已调整分布逻辑) ---
+        // --- 核心：创建粒子 (保持下沉分布逻辑) ---
         function createParticle(isFixedImage = false, texture = null, imgRatio = 1.0) {
             let mesh;
             let isImage = false;
             let targetPos; 
 
-            // --- 修改分布逻辑 ---
-            // 使用 Math.pow(Math.random(), 1.8) 让 ratio 更倾向于 0 (底部)，从而缓解顶部拥挤
+            // 使用 Math.pow(Math.random(), 1.8) 让 ratio 更倾向于 0 (底部)，缓解顶部拥挤
             const ratio = Math.pow(Math.random(), 1.8); 
             
             const h = ratio * 24.5 - 11; 
             
-            // 稍微增大基底半径 (12)，并调整指数，让底部容纳更多粒子
+            // 稍微增大基底半径 (12)，并调整指数
             let maxR = 12 * Math.pow(1 - ratio, 0.9);
             
             maxR *= (0.8 + 0.2 * Math.sin(ratio * Math.PI * 14));
@@ -531,7 +616,8 @@
                     const placeholder = createPlaceholderTexture("没有照片");
                     for(let k=0; k<20; k++) particles.push(createParticle(true, placeholder, 1.0));
                 }
-                setTimeout(playIntro, 800);
+                // 加载完毕，但等待用户点击门
+                document.getElementById('loading').style.display = 'none'; 
             }
         }
 
@@ -548,15 +634,34 @@
             checkAllChecked();
         }
 
+        // --- 核心：初始化与动画逻辑 ---
         window.initExperience = async function() {
-            const startScreen = document.getElementById('start-screen');
-            startScreen.style.opacity = 0;
-            setTimeout(() => startScreen.style.display = 'none', 500);
+            // 1. 文本立即消失
+            const textEl = document.getElementById('welcome-text');
+            if(textEl) textEl.classList.add('fade-out-text');
 
-            document.getElementById('loading').style.display = 'block';
-            await startCamera();
-            loadPhotos();
+            // 2. 门打开 + 镜头推进动画
+            const doorBtn = document.querySelector('.door-btn');
+            const doorScene = document.getElementById('door-scene');
+            
+            if(doorBtn) doorBtn.classList.add('door-open');
+            if(doorScene) doorScene.classList.add('camera-zoom');
+
+            // 3. 延迟后隐藏 Start Screen 并开始体验
+            setTimeout(async () => {
+                const startScreen = document.getElementById('start-screen');
+                startScreen.style.opacity = 0;
+                
+                document.getElementById('loading').style.display = 'block';
+                await startCamera();
+                playIntro(); // 开始粒子动画
+                
+                setTimeout(() => startScreen.style.display = 'none', 1000);
+            }, 1800); // 1.8秒后切换，留给门打开和放大的时间
         };
+
+        // 预加载照片
+        loadPhotos();
 
         function loadPhotos() {
             for(let i=1; i<=MAX_PHOTO_CHECK; i++) {
@@ -788,7 +893,9 @@
                 };
             } catch (err) {
                 console.warn("Camera access denied:", err);
-                alert("无法访问摄像头。您仍然可以观赏星空树，但手势功能将不可用。");
+                // 这里没有了alert，直接静默失败也行，或者在status里提示
+                const statusDiv = document.getElementById('status');
+                if(statusDiv) statusDiv.innerText = "⭐ 仅供观赏 (摄像头未授权)";
             }
         }
 
