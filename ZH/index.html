@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>爱的回忆圣诞树</title>
+    <title>3D 梦幻银色圣诞树 (防崩溃稳定版)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: "Microsoft YaHei", sans-serif; touch-action: none; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
@@ -46,7 +46,8 @@
     </div>
 
     <div id="video-container">
-        <video id="input-video" playsinline muted autoplay></video>
+        <!-- 增加 playsinline 和 webkit-playsinline 防止iOS全屏播放 -->
+        <video id="input-video" playsinline webkit-playsinline muted autoplay></video>
     </div>
     
     <div id="ui-container">
@@ -64,7 +65,7 @@
         }
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.4/gsap.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <!-- 移除了 camera_utils.js，改用原生API -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <script type="module">
@@ -539,7 +540,6 @@
             }
         }
 
-        // 修改点：照片加载逻辑，支持大写JPG和小写jpg
         function processLoadedTexture(tex) {
             tex.colorSpace = THREE.SRGBColorSpace;
             let ratio = 1.0;
@@ -552,19 +552,17 @@
         }
 
         for(let i=1; i<=MAX_PHOTO_CHECK; i++) {
-            // 优先尝试大写 JPG
+            // 支持双格式检查
             loader.load(
                 `${i}.JPG`, 
                 (tex) => { processLoadedTexture(tex); }, 
                 undefined, 
                 (err) => {
-                    // 如果 JPG 失败，尝试小写 jpg
                     loader.load(
                         `${i}.jpg`,
                         (tex) => { processLoadedTexture(tex); },
                         undefined,
                         (err2) => {
-                            // 两个都失败，标记已检查
                             checkAllChecked();
                         }
                     );
@@ -843,11 +841,40 @@
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
         hands.onResults(onResults);
 
-        const cameraUtils = new Camera(videoElement, {
-            onFrame: async () => { await hands.send({image: videoElement}); },
-            width: 320, height: 240, facingMode: 'user'
-        });
-        cameraUtils.start();
+        // --- 修复点：替换 Camera 类，改用原生 getUserMedia 解决崩溃问题 ---
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: 320,
+                        height: 240,
+                        facingMode: 'user' // 优先使用前置摄像头
+                    }
+                });
+                videoElement.srcObject = stream;
+                videoElement.onloadedmetadata = () => {
+                    videoElement.play();
+                    requestAnimationFrame(processVideo);
+                };
+            } catch (err) {
+                console.error("Camera access error:", err);
+                alert("无法访问摄像头，请检查浏览器权限。");
+            }
+        }
+
+        async function processVideo() {
+            if (videoElement.paused || videoElement.ended) {
+                return;
+            }
+            // 只有当视频准备好时才发送数据
+            if (videoElement.readyState >= 2) {
+                await hands.send({image: videoElement});
+            }
+            requestAnimationFrame(processVideo);
+        }
+
+        // 启动摄像头
+        startCamera();
 
         window.addEventListener('resize', () => {
             adjustCamera();
